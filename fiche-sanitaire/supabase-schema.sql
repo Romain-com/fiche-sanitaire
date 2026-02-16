@@ -6,6 +6,7 @@ CREATE TABLE fiches (
   prenom VARCHAR(100) NOT NULL,
   email VARCHAR(255) NOT NULL,
   status VARCHAR(20) DEFAULT 'envoye',
+  date_premier_ski DATE,
   data JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

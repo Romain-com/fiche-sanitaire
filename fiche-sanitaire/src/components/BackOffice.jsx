@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Eye, Printer, CheckCircle, Trash2, RefreshCw, LogOut, Copy, ExternalLink, UserPlus } from 'lucide-react'
+import { Plus, Eye, Printer, CheckCircle, Trash2, RefreshCw, LogOut, Copy, ExternalLink, UserPlus, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { sendRelanceEmail } from '../lib/email'
 
 const STATUS_CONFIG = {
   envoye: { label: 'Envoyé', color: 'bg-yellow-100 text-yellow-800', dot: '🟡' },
@@ -22,7 +23,7 @@ export default function BackOffice({ onLogout, onPrint }) {
   const [fiches, setFiches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
-  const [newFiche, setNewFiche] = useState({ nom: '', prenom: '', email: '' })
+  const [newFiche, setNewFiche] = useState({ nom: '', prenom: '', email: '', date_premier_ski: '' })
   const [creating, setCreating] = useState(false)
   const [inviteModal, setInviteModal] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -42,9 +43,30 @@ export default function BackOffice({ onLogout, onPrint }) {
     const { data, error } = await supabase
       .from('Fiche Sanitaire')
       .select('*')
+      .order('date_premier_ski', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
     if (!error) setFiches(data || [])
     setLoading(false)
+  }
+
+  function formatDateFr(dateStr) {
+    if (!dateStr) return null
+    const date = new Date(dateStr + 'T00:00:00')
+    return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  function groupFichesByDate(fiches) {
+    const groups = []
+    let currentDate = null
+    for (const fiche of fiches) {
+      const dateKey = fiche.date_premier_ski || '__sans_date__'
+      if (dateKey !== currentDate) {
+        currentDate = dateKey
+        groups.push({ date: dateKey, label: dateKey === '__sans_date__' ? 'Sans date' : formatDateFr(dateKey), fiches: [] })
+      }
+      groups[groups.length - 1].fiches.push(fiche)
+    }
+    return groups
   }
 
   async function createFiche(e) {
@@ -58,6 +80,7 @@ export default function BackOffice({ onLogout, onPrint }) {
         nom: newFiche.nom.trim(),
         prenom: newFiche.prenom.trim(),
         email: newFiche.email.trim(),
+        date_premier_ski: newFiche.date_premier_ski || null,
         status: 'envoye',
         data: {
           nomEnfant: newFiche.nom.trim(),
@@ -68,7 +91,7 @@ export default function BackOffice({ onLogout, onPrint }) {
       .single()
 
     if (!error && data) {
-      setNewFiche({ nom: '', prenom: '', email: '' })
+      setNewFiche({ nom: '', prenom: '', email: '', date_premier_ski: '' })
       setShowCreate(false)
       setInviteModal(data)
       fetchFiches()
@@ -161,6 +184,15 @@ export default function BackOffice({ onLogout, onPrint }) {
 
   function handlePrint(fiche) {
     onPrint(fiche)
+  }
+
+  async function relancerFiche(fiche) {
+    await sendRelanceEmail({
+      to: fiche.email,
+      code: fiche.code,
+      url: getInviteUrl(fiche.code),
+      childName: `${fiche.prenom} ${fiche.nom}`,
+    })
   }
 
   return (
@@ -292,13 +324,22 @@ export default function BackOffice({ onLogout, onPrint }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-esf-red"
                   />
                 </div>
-                <div className="mb-4">
+                <div className="mb-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Email du parent</label>
                   <input
                     type="email"
                     value={newFiche.email}
                     onChange={e => setNewFiche(prev => ({ ...prev, email: e.target.value }))}
                     required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-esf-red"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date premier jour de ski</label>
+                  <input
+                    type="date"
+                    value={newFiche.date_premier_ski}
+                    onChange={e => setNewFiche(prev => ({ ...prev, date_premier_ski: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-esf-red"
                   />
                 </div>
@@ -437,8 +478,18 @@ export default function BackOffice({ onLogout, onPrint }) {
             <p className="text-gray-500 mt-2">Aucune fiche pour le moment</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {fiches.map(fiche => {
+          <div className="space-y-4">
+            {groupFichesByDate(fiches).map(group => (
+              <div key={group.date}>
+                <div className="flex items-center gap-2 mb-2 mt-2">
+                  <span className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                    {group.label}
+                  </span>
+                  <span className="text-xs text-gray-400">({group.fiches.length})</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+                <div className="space-y-3">
+            {group.fiches.map(fiche => {
               const status = STATUS_CONFIG[fiche.status] || STATUS_CONFIG.envoye
               return (
                 <div key={fiche.id} className="bg-white rounded-xl shadow-sm p-4">
@@ -456,6 +507,14 @@ export default function BackOffice({ onLogout, onPrint }) {
                     <div className="flex gap-1 flex-wrap justify-end">
                       {fiche.status === 'envoye' && (
                         <>
+                          <button
+                            onClick={() => relancerFiche(fiche)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs border border-orange-300 text-orange-600 rounded-lg hover:bg-orange-50 transition-colors"
+                            title="Relancer par email"
+                          >
+                            <Mail size={14} />
+                            Relancer
+                          </button>
                           <button
                             onClick={() => setInviteModal(fiche)}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -508,6 +567,9 @@ export default function BackOffice({ onLogout, onPrint }) {
                 </div>
               )
             })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
