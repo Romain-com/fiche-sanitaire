@@ -29,6 +29,7 @@ export default function BackOffice({ onLogout, onPrint }) {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmSign, setConfirmSign] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [showInvite, setShowInvite] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting, setInviting] = useState(false)
@@ -193,6 +194,41 @@ export default function BackOffice({ onLogout, onPrint }) {
       url: getInviteUrl(fiche.code),
       childName: `${fiche.prenom} ${fiche.nom}`,
     })
+  }
+
+  function isPrintable(fiche) {
+    return fiche.status === 'rempli' || fiche.status === 'imprime'
+  }
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectGroup(groupFiches) {
+    const printable = groupFiches.filter(isPrintable)
+    if (printable.length === 0) return
+    const allSelected = printable.every(f => selectedIds.has(f.id))
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      printable.forEach(f => {
+        if (allSelected) next.delete(f.id)
+        else next.add(f.id)
+      })
+      return next
+    })
+  }
+
+  function handlePrintSelected() {
+    const selected = fiches.filter(f => selectedIds.has(f.id))
+    if (selected.length > 0) {
+      onPrint(selected)
+      setSelectedIds(new Set())
+    }
   }
 
   return (
@@ -487,13 +523,31 @@ export default function BackOffice({ onLogout, onPrint }) {
                   </span>
                   <span className="text-xs text-gray-400">({group.fiches.length})</span>
                   <div className="flex-1 h-px bg-gray-200" />
+                  {group.fiches.some(isPrintable) && (
+                    <button
+                      onClick={() => toggleSelectGroup(group.fiches)}
+                      className="text-xs text-purple-600 hover:text-purple-800 whitespace-nowrap"
+                    >
+                      {group.fiches.filter(isPrintable).every(f => selectedIds.has(f.id))
+                        ? 'Tout désélectionner'
+                        : 'Tout sélectionner'}
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-3">
             {group.fiches.map(fiche => {
               const status = STATUS_CONFIG[fiche.status] || STATUS_CONFIG.envoye
               return (
-                <div key={fiche.id} className="bg-white rounded-xl shadow-sm p-4">
+                <div key={fiche.id} className={`bg-white rounded-xl shadow-sm p-4 ${selectedIds.has(fiche.id) ? 'ring-2 ring-purple-400' : ''}`}>
                   <div className="flex items-center justify-between">
+                    {isPrintable(fiche) && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(fiche.id)}
+                        onChange={() => toggleSelect(fiche.id)}
+                        className="w-4 h-4 mr-3 accent-purple-600 flex-shrink-0 cursor-pointer"
+                      />
+                    )}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold">{fiche.prenom} {fiche.nom}</span>
@@ -573,6 +627,26 @@ export default function BackOffice({ onLogout, onPrint }) {
           </div>
         )}
       </div>
+
+      {/* Barre flottante impression en masse */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 z-50">
+          <span className="text-sm font-medium">{selectedIds.size} fiche{selectedIds.size > 1 ? 's' : ''} sélectionnée{selectedIds.size > 1 ? 's' : ''}</span>
+          <button
+            onClick={handlePrintSelected}
+            className="flex items-center gap-2 bg-white text-purple-700 font-semibold px-4 py-1.5 rounded-full text-sm hover:bg-purple-50 transition-colors"
+          >
+            <Printer size={16} />
+            Imprimer la sélection
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-purple-200 hover:text-white text-sm ml-1"
+          >
+            Annuler
+          </button>
+        </div>
+      )}
     </div>
   )
 }

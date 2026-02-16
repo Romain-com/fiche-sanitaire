@@ -8,7 +8,7 @@ import PrintView from './components/PrintView'
 export default function App() {
   const [view, setView] = useState('home') // home | backoffice | form | print
   const [clientCode, setClientCode] = useState(null)
-  const [printFiche, setPrintFiche] = useState(null)
+  const [printFiches, setPrintFiches] = useState(null)
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [resetMode, setResetMode] = useState(false)
@@ -62,18 +62,19 @@ export default function App() {
 
   function handleBack() {
     setClientCode(null)
-    setPrintFiche(null)
+    setPrintFiches(null)
     window.history.replaceState({}, '', window.location.pathname)
     setView(session ? 'backoffice' : 'home')
   }
 
-  function handlePrint(fiche) {
-    setPrintFiche(fiche)
+  function handlePrint(ficheOrFiches) {
+    const fiches = Array.isArray(ficheOrFiches) ? ficheOrFiches : [ficheOrFiches]
+    setPrintFiches(fiches)
     setView('print')
   }
 
   function handleBackFromPrint() {
-    setPrintFiche(null)
+    setPrintFiches(null)
     setView('backoffice')
   }
 
@@ -98,7 +99,7 @@ export default function App() {
     case 'form':
       return <ClientForm code={clientCode} onBack={handleBack} />
     case 'print':
-      return <PrintView fiche={printFiche} onBack={handleBackFromPrint} />
+      return <PrintView fiches={printFiches} onBack={handleBackFromPrint} />
     default:
       return <HomePage onCodeSubmit={handleCodeSubmit} />
   }

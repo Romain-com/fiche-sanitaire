@@ -35,44 +35,11 @@ function Checkbox({ checked }) {
   )
 }
 
-export default function PrintView({ fiche, onBack }) {
+function FichePage({ fiche }) {
   const data = fiche.data || {}
 
-  useEffect(() => {
-    async function markPrinted() {
-      if (fiche.status === 'rempli') {
-        await supabase
-          .from('Fiche Sanitaire')
-          .update({ status: 'imprime' })
-          .eq('id', fiche.id)
-      }
-    }
-    markPrinted()
-
-    const timer = setTimeout(() => {
-      window.print()
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [fiche.id, fiche.status])
-
   return (
-    <div>
-      {/* Print help bar */}
-      <div className="no-print bg-purple-50 border-b border-purple-200 px-4 py-3 flex items-center justify-between">
-        <div className="text-sm text-purple-700">
-          L'impression devrait se lancer automatiquement. Sinon : <strong>Ctrl+P</strong> (Windows) / <strong>Cmd+P</strong> (Mac)
-        </div>
-        <button
-          onClick={onBack}
-          className="px-4 py-2 bg-esf-red hover:bg-esf-red-hover text-white text-sm rounded-lg transition-colors"
-        >
-          Retour au back-office
-        </button>
-      </div>
-
-      {/* A4 Paysage */}
-      <div className="print-page bg-white mx-auto" style={{ width: '297mm', height: '210mm', padding: '8mm 10mm' }}>
+    <div className="print-page bg-white mx-auto" style={{ width: '297mm', height: '210mm', padding: '8mm 10mm', pageBreakAfter: 'always' }}>
         {/* En-tête */}
         <div className="flex items-start justify-between mb-2 border-b border-gray-300 pb-2">
           <div className="flex items-center gap-2">
@@ -243,6 +210,50 @@ export default function PrintView({ fiche, onBack }) {
           </div>
         </div>
       </div>
+  )
+}
+
+export default function PrintView({ fiches, onBack }) {
+  useEffect(() => {
+    async function markAllPrinted() {
+      const toMark = fiches.filter(f => f.status === 'rempli')
+      for (const fiche of toMark) {
+        await supabase
+          .from('Fiche Sanitaire')
+          .update({ status: 'imprime' })
+          .eq('id', fiche.id)
+      }
+    }
+    markAllPrinted()
+
+    const timer = setTimeout(() => {
+      window.print()
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [fiches])
+
+  return (
+    <div>
+      {/* Print help bar */}
+      <div className="no-print bg-purple-50 border-b border-purple-200 px-4 py-3 flex items-center justify-between">
+        <div className="text-sm text-purple-700">
+          {fiches.length > 1
+            ? `Impression de ${fiches.length} fiches. `
+            : ''}
+          L'impression devrait se lancer automatiquement. Sinon : <strong>Ctrl+P</strong> (Windows) / <strong>Cmd+P</strong> (Mac)
+        </div>
+        <button
+          onClick={onBack}
+          className="px-4 py-2 bg-esf-red hover:bg-esf-red-hover text-white text-sm rounded-lg transition-colors"
+        >
+          Retour au back-office
+        </button>
+      </div>
+
+      {fiches.map((fiche, index) => (
+        <FichePage key={fiche.id} fiche={fiche} />
+      ))}
     </div>
   )
 }
